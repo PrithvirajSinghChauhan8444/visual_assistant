@@ -1,0 +1,18 @@
+{
+  "name": "diana-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.164.1",
+    "@pixiv/three-vrm": "^2.0.2"
+  },
+  "devDependencies": {
+    "vite": "^4.4.9"
+  }
+}

@@ -24,6 +24,16 @@ models/
 *.ogg
 logs/
 
+# Node.js & Vite Frontend
+node_modules/
+dist/
+dist-ssr/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.eslintcache
+
 # IDEs & System
 .vscode/
 .idea/

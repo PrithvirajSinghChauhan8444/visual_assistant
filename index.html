@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Diana Companion</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/index.css">
+</head>
+<body>
+  <!-- Three.js 3D viewport -->
+  <div id="canvas-container"></div>
+
+  <!-- Glassmorphism Chat Bubble -->
+  <div id="chat-bubble" class="hidden">
+    <div class="bubble-header">
+      <span class="pulse-indicator"></span>
+      <span class="companion-name">DIANA</span>
+    </div>
+    <div id="bubble-text">Initializing companion...</div>
+    <div class="glow-border"></div>
+  </div>
+
+  <!-- Status Debug HUD -->
+  <div id="status-panel">
+    <div class="status-row">
+      <span class="label">Status:</span>
+      <span id="status-val" class="status-active">CONNECTING</span>
+    </div>
+    <div class="status-row">
+      <span class="label">Model:</span>
+      <span id="model-val">Diana v2 (VRM)</span>
+    </div>
+    <div class="status-row">
+      <span class="label">Speech:</span>
+      <span id="speech-val">Offline</span>
+    </div>
+  </div>
+
+  <script type="module" src="/main.js"></script>
+</body>
+</html>
