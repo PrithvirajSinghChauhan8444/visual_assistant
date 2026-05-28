@@ -20,6 +20,8 @@
       <span class="companion-name">DIANA</span>
     </div>
     <div id="bubble-text">Initializing companion...</div>
+    <!-- Sound-reactive procedural voice visualizer -->
+    <canvas id="soundwave-canvas"></canvas>
     <div class="glow-border"></div>
   </div>
 
@@ -37,6 +39,43 @@
       <span class="label">Speech:</span>
       <span id="speech-val">Offline</span>
     </div>
+  </div>
+
+  <!-- Glassmorphism Theme & Gaze Control Panel -->
+  <div id="theme-panel">
+    <div class="panel-header">CORE CONFIG</div>
+    <div class="theme-buttons">
+      <button class="theme-btn active" data-theme="pink" title="Hologram Pink">
+        <span class="color-dot pink"></span>
+      </button>
+      <button class="theme-btn" data-theme="cyan" title="Cyberpunk Cyan">
+        <span class="color-dot cyan"></span>
+      </button>
+      <button class="theme-btn" data-theme="green" title="Matrix Green">
+        <span class="color-dot green"></span>
+      </button>
+      <button class="theme-btn" data-theme="orange" title="Solana Orange">
+        <span class="color-dot orange"></span>
+      </button>
+    </div>
+    <div class="control-row">
+      <span class="label">Gaze Tracking</span>
+      <label class="switch">
+        <input type="checkbox" id="gaze-toggle" checked>
+        <span class="slider"></span>
+      </label>
+    </div>
+  </div>
+
+  <!-- Centered Glassmorphic Chat Input Bar -->
+  <div id="input-container">
+    <input type="text" id="chat-input" placeholder="Type a message for Diana..." autocomplete="off">
+    <button id="send-btn">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="22" y1="2" x2="11" y2="13"></line>
+        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+      </svg>
+    </button>
   </div>
 
   <script type="module" src="/main.js"></script>

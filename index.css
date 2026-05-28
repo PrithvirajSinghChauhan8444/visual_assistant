@@ -16,7 +16,7 @@
 body {
   font-family: 'Inter', sans-serif;
   overflow: hidden;
-  background: transparent !important; /* Extremely important for Tauri window transparency */
+  background: radial-gradient(circle at center, #111827 0%, #030712 100%) !important;
   width: 100vw;
   height: 100vh;
   position: relative;
@@ -36,9 +36,10 @@ body {
 /* Floating Glassmorphism Speech Bubble */
 #chat-bubble {
   position: absolute;
-  bottom: 200px;
-  right: 60px;
-  width: 320px;
+  bottom: 95px;
+  left: 50%;
+  transform: translateX(-50%) translateY(15px);
+  width: 460px;
   padding: 20px;
   border-radius: 16px;
   background: var(--bg-glass);
@@ -47,19 +48,80 @@ body {
   border: 1px solid var(--border-glass);
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   z-index: 10;
-  transform: translateY(15px);
   opacity: 0;
   transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   overflow: hidden;
 }
 
 #chat-bubble.active {
-  transform: translateY(0);
+  transform: translateX(-50%) translateY(0);
   opacity: 1;
 }
 
 #chat-bubble.hidden {
   display: none;
+}
+
+/* Centered Glassmorphic Chat Input Bar */
+#input-container {
+  position: absolute;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 460px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-glass);
+  border-radius: 12px;
+  padding: 6px 6px 6px 14px;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+  z-index: 10;
+  transition: all 0.3s ease;
+}
+
+#input-container:focus-within {
+  border-color: var(--neon-magenta);
+  box-shadow: 0 8px 32px 0 rgba(255, 0, 127, 0.15);
+}
+
+#chat-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-main);
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+}
+
+#chat-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+#send-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-main);
+  transition: all 0.2s ease;
+}
+
+#send-btn:hover {
+  background: var(--neon-magenta);
+  border-color: var(--neon-magenta);
+  color: #ffffff;
+  box-shadow: 0 0 10px var(--neon-magenta);
 }
 
 .bubble-header {
@@ -161,6 +223,141 @@ body {
 .status-connecting {
   color: #fbbf24 !important;
   text-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
+}
+
+/* Soundwave Canvas visualizer */
+#soundwave-canvas {
+  width: 100%;
+  height: 32px;
+  margin-top: 12px;
+  display: block;
+  opacity: 0.85;
+}
+
+/* Glassmorphism Configuration HUD (Top Right) */
+#theme-panel {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(10, 10, 15, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 170px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.panel-header {
+  font-family: 'Outfit', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding-bottom: 6px;
+}
+
+.theme-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.theme-btn {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.theme-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.theme-btn.active {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: var(--neon-magenta);
+  box-shadow: 0 0 8px var(--neon-magenta);
+}
+
+.color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.color-dot.pink { background-color: #ff007f; box-shadow: 0 0 6px #ff007f; }
+.color-dot.cyan { background-color: #00f0ff; box-shadow: 0 0 6px #00f0ff; }
+.color-dot.green { background-color: #39ff14; box-shadow: 0 0 6px #39ff14; }
+.color-dot.orange { background-color: #ff9900; box-shadow: 0 0 6px #ff9900; }
+
+.control-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-main);
+  margin-top: 4px;
+}
+
+/* Premium toggle switch */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 28px;
+  height: 16px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.1);
+  transition: .3s;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 10px;
+  width: 10px;
+  left: 2px;
+  bottom: 2px;
+  background-color: white;
+  transition: .3s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: var(--neon-magenta);
+}
+
+input:checked + .slider:before {
+  transform: translateX(12px);
 }
 
 /* Animations */

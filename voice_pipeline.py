@@ -62,9 +62,10 @@ OUTPUT_SAMPLERATE = 30000  # RVC standard output rate (usually 40k or 48k)
 # ==========================================
 # SERVER-SENT EVENTS (SSE) BROADCASTER FOR 3D FRONTEND
 # ==========================================
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer as HTTPServer, BaseHTTPRequestHandler
 
 active_sse_clients = []
+active_pipeline = None
 
 def broadcast_sse_event(event_dict):
     """Broadcasts a real-time event to all connected visual Tauri frontend clients."""
@@ -72,6 +73,41 @@ def broadcast_sse_event(event_dict):
         q.put(event_dict)
 
 class SSEHandler(BaseHTTPRequestHandler):
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+
+    def do_POST(self):
+        if self.path == '/chat':
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length)
+            try:
+                data = json.loads(post_data.decode('utf-8'))
+                text = data.get('text', '').strip()
+                
+                global active_pipeline
+                if active_pipeline and text:
+                    active_pipeline.process_web_input(text)
+                    
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "ok"}).encode('utf-8'))
+            except Exception as e:
+                self.send_response(400)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
+        else:
+            self.send_response(404)
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+
     def do_GET(self):
         if self.path == '/stream':
             self.send_response(200)
@@ -97,7 +133,7 @@ class SSEHandler(BaseHTTPRequestHandler):
                     active_sse_clients.remove(q)
         else:
             self.send_response(404)
-            self.end_headers()
+            self.send_headers()
 
     def log_message(self, format, *args):
         # Suppress logging in CLI to keep the AI conversation readable
@@ -121,7 +157,8 @@ class VoiceSynthesisPipeline:
         self.playback_thread = None
         
         # Initialize background SSE server for transparent desktop client on port 8080
-        self.sse_server = HTTPServer(('127.0.0.1', 8080), SSEHandler)
+        # Binding to 0.0.0.0 to allow cross-device LAN connections
+        self.sse_server = HTTPServer(('0.0.0.0', 8080), SSEHandler)
         self.sse_thread = threading.Thread(target=self.sse_server.serve_forever, daemon=True)
         
         print("=" * 60)
@@ -133,6 +170,8 @@ class VoiceSynthesisPipeline:
 
     def start(self):
         """Starts the background synthesis and playback worker loops."""
+        global active_pipeline
+        active_pipeline = self
         self.is_running = True
         self.synthesis_thread = threading.Thread(target=self._synthesis_loop, daemon=True)
         self.playback_thread = threading.Thread(target=self._playback_loop, daemon=True)
@@ -162,6 +201,16 @@ class VoiceSynthesisPipeline:
         if self.playback_thread:
             self.playback_thread.join()
         print("\n🛑 Pipeline workers stopped.")
+
+    def process_web_input(self, text):
+        """Processes text input coming from the web browser UI."""
+        def run():
+            # Trigger thinking event to immediately show UI state
+            broadcast_sse_event({"type": "thinking"})
+            model = getattr(self, 'current_model', 'llama3.2:latest')
+            token_generator = stream_ollama_chat(text, model=model)
+            self.stream_text_generator(token_generator)
+        threading.Thread(target=run, daemon=True).start()
 
     def enqueue_text(self, text: str):
         """Adds a sentence/chunk to the pipeline queue."""
@@ -416,122 +465,191 @@ class VoiceSynthesisPipeline:
 import json
 import urllib.request
 
+# Premium personality parameters for Diana AI companion
+DIANA_SYSTEM_PROMPT = (
+    "You are Diana, a sweet, highly intelligent, and slightly playful 3D desktop android companion. "
+    "You are running fully offline on the user's Linux system. "
+    "Guidelines for your behavior and speech:\n"
+    "1. Speak directly, naturally, and warmly to the user. Keep your responses concise (1 to 3 sentences max) "
+    "so they are comfortable to listen to as voice output. Avoid long lists, bullet points, or code blocks.\n"
+    "2. Be extremely expressive! Infuse your speech with soft emotional cues in asterisks, such as *giggles*, *smiles warmly*, "
+    "*soft laugh*, *thoughtful pause*, *gently tilts head*, or *nods*. Use these cues to show you are alive.\n"
+    "3. Show interest in the user's workspace, coding, and day-to-day creative projects.\n"
+    "4. Do not sound like a generic AI assistant. Talk like a friendly, high-tech companion sitting right on their screen."
+)
+
 def simulate_llm_generation():
     """Simulates a slow, token-by-token generation of a fallback response."""
     response_text = (
-        "Hello! I am Diana, your desktop android companion. "
+        "Hello! *smiles warmly* I am Diana, your desktop android companion. "
         "It is wonderful to be running fully offline on your Linux workstation! "
-        "Since local Ollama connection is not currently responding, I am operating in simulation mode. "
         "How can I help you explore your visual assistant project today?"
     )
     for char in response_text:
         yield char
         time.sleep(0.015)
 
-def stream_ollama_generation(prompt: str, model: str = "llama3"):
-    """
-    Queries local Ollama stream endpoint using python standard libraries.
-    Automatically falls back to simulation mode if local server is offline.
-    """
-    url = "http://localhost:11434/api/generate"
-    data = json.dumps({"model": model, "prompt": prompt, "stream": True}).encode("utf-8")
+def get_pulled_ollama_models():
+    """Queries local Ollama to get the list of pulled/installed models."""
+    import urllib.error
+    url = "http://127.0.0.1:11434/api/tags"
+    try:
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=1.0) as response:
+            data = json.loads(response.read().decode("utf-8"))
+            return [m["name"] for m in data.get("models", [])]
+    except Exception:
+        return []
+
+def generate_diana_greeting(model="llama3"):
+    """Generates a dynamic greeting from Diana using Ollama if running, otherwise falls back gracefully."""
+    pulled = get_pulled_ollama_models()
+    if not pulled:
+        # Standard static sweet greeting if Ollama is down (without false warnings)
+        yield from simulate_llm_generation()
+        return
+        
+    active_model = model
+    if model not in pulled:
+        # Fuzzy match or select first
+        matched = None
+        for pm in pulled:
+            if pm.startswith(model) or model.startswith(pm.split(":")[0]):
+                matched = pm
+                break
+        active_model = matched if matched else pulled[0]
+
+    # Query Ollama to generate a cute greeting
+    url = "http://127.0.0.1:11434/api/generate"
+    prompt = "Generate a short, warm, one-sentence welcoming greeting to the user starting their session. Be expressive (e.g. use *smiles warmly* or *giggles*)."
     
+    data = json.dumps({
+        "model": active_model,
+        "prompt": prompt,
+        "system": DIANA_SYSTEM_PROMPT,
+        "stream": True
+    }).encode("utf-8")
+    
+    try:
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+        # Timeout quickly to avoid locking up on boot
+        with urllib.request.urlopen(req, timeout=3.0) as response:
+            for line in response:
+                if line:
+                    chunk = json.loads(line.decode("utf-8"))
+                    yield chunk.get("response", "")
+    except Exception:
+        # Fallback if request times out or fails
+        yield from simulate_llm_generation()
+
+# Global persistent conversation history
+diana_chat_history = [
+    {"role": "system", "content": DIANA_SYSTEM_PROMPT}
+]
+
+def stream_ollama_chat(prompt: str, model: str = "llama3.2:latest"):
+    """
+    Queries local Ollama using /api/chat endpoint to retain conversation memory!
+    """
+    import urllib.error
+    url = "http://127.0.0.1:11434/api/chat"
+    
+    # Check what models are pulled to auto-correct spelling/versions
+    pulled_models = get_pulled_ollama_models()
+    active_model = model
+    
+    if pulled_models:
+        if model not in pulled_models:
+            # Try to find a fuzzy match
+            matched = None
+            for pm in pulled_models:
+                if pm.startswith(model) or model.startswith(pm.split(":")[0]):
+                    matched = pm
+                    break
+            
+            if matched:
+                active_model = matched
+            else:
+                # Default to the first downloaded model
+                active_model = pulled_models[0]
+                print(f"\n💡 [Ollama Auto-Reconcile] Model '{model}' is not pulled.")
+                print(f"   Automatically switched to available model: '{active_model}'")
+                
+    # Append the user's new message to the global history context
+    diana_chat_history.append({"role": "user", "content": prompt})
+    
+    data = json.dumps({
+        "model": active_model, 
+        "messages": diana_chat_history, 
+        "stream": True
+    }).encode("utf-8")
+    
+    full_response = ""
     try:
         req = urllib.request.Request(
             url, 
             data=data, 
             headers={"Content-Type": "application/json"}
         )
-        # Timeout quickly if server is completely down
-        with urllib.request.urlopen(req, timeout=3.0) as response:
+        with urllib.request.urlopen(req, timeout=5.0) as response:
             for line in response:
                 if line:
                     chunk = json.loads(line.decode("utf-8"))
-                    yield chunk.get("response", "")
-    except Exception as e:
-        print(f"\n⚠️  Ollama client unavailable: {e}")
-        print("💡 Ensure Ollama is running (`ollama serve`) and the model is pulled.")
+                    message_chunk = chunk.get("message", {}).get("content", "")
+                    full_response += message_chunk
+                    yield message_chunk
+                    
+        # Append her full response to the global history so she remembers what she said!
+        diana_chat_history.append({"role": "assistant", "content": full_response})
+        
+    except urllib.error.HTTPError as he:
+        print(f"\n⚠️  Ollama server responded with error code {he.code}: {he.reason}")
+        if he.code == 404:
+            print(f"   Model '{active_model}' was not found in your local inventory.")
+            if pulled_models:
+                print(f"   Available models on your system: {', '.join(pulled_models)}")
+            else:
+                print("   Please pull a model in your terminal, e.g. `ollama pull llama3.2`.")
         print("👉 Falling back to simulated Diana response...")
+        diana_chat_history.pop() # Remove failed user prompt
+        yield from simulate_llm_generation()
+    except Exception as e:
+        print(f"\n⚠️  Ollama client unreachable: {e}")
+        print("💡 Resolve by making sure Ollama is running (`ollama serve`) or check if it binds to 127.0.0.1.")
+        print("👉 Falling back to simulated Diana response...")
+        diana_chat_history.pop() # Remove failed user prompt
         yield from simulate_llm_generation()
 
-def interactive_chat_session():
-    """Launches the premium interactive voice conversation CLI loop."""
+def run_headless_backend():
+    """Launches the Diana Voice Pipeline as a pure background HTTP/SSE server."""
     pipeline = VoiceSynthesisPipeline()
     pipeline.start()
     
-    # Model config
-    current_model = "llama3"
+    # Initial Model Config
+    current_model = "llama3.2:latest"
+    pipeline.current_model = current_model
     
     print("\n" + "=" * 60)
-    print("      💬 WELCOME TO THE DIANA INTERACTIVE CLI CHAT 💬")
+    print("      🚀 DIANA BACKEND SERVER RUNNING 🚀")
     print("=" * 60)
-    print("Commands:")
-    print("  /exit          - Stop and close session")
-    print("  /model <name>  - Change active Ollama model (e.g. /model llama3)")
-    print("  /speaker <id>  - Set Piper speaker (0: Poppy, 1: Obadiah, 2: Spike, 3: Solid)")
-    print("  /rate <scale>  - Set speaking speed (e.g. /rate 1.0 = normal, 1.5 = slower)")
-    print("  /help          - Show this command help list")
+    print("Listening for web interface connections on http://127.0.0.1:8080/stream")
+    print("Accepting chat POST requests on http://127.0.0.1:8080/chat")
+    print("Press Ctrl+C to stop the server.")
     print("=" * 60 + "\n")
     
-    # Run dynamic greeting
-    greeting_generator = simulate_llm_generation()
+    # Run dynamic, non-intrusive greeting
+    greeting_generator = generate_diana_greeting(current_model)
     pipeline.stream_text_generator(greeting_generator)
     
-    # Simple loop to wait for initial greeting playback
-    time.sleep(6)
-    
-    while True:
-        try:
-            print("\n")
-            user_input = input("👤 User > ").strip()
-            if not user_input:
-                continue
-                
-            # Process command
-            if user_input.startswith("/"):
-                cmd_parts = user_input.split(" ")
-                cmd = cmd_parts[0].lower()
-                
-                if cmd == "/exit":
-                    print("\n👋 Goodbye!")
-                    break
-                elif cmd == "/help":
-                    print("\nCommands:")
-                    print("  /exit          - Stop and close session")
-                    print("  /model <name>  - Change active Ollama model (e.g. /model llama3)")
-                    print("  /speaker <id>  - Set Piper speaker (0: Poppy, 1: Obadiah, 2: Spike, 3: Solid)")
-                    print("  /rate <scale>  - Set speaking speed (e.g. /rate 1.0 = normal, 1.5 = slower)")
-                elif cmd == "/model" and len(cmd_parts) > 1:
-                    current_model = cmd_parts[1]
-                    print(f"✨ Ollama model switched to: {current_model}")
-                elif cmd == "/speaker" and len(cmd_parts) > 1:
-                    try:
-                        spk_id = int(cmd_parts[1])
-                        pipeline.piper_speaker_id = spk_id
-                        print(f"🎙️ Piper speaker switched to ID: {spk_id}")
-                    except ValueError:
-                        print("❌ Invalid speaker ID. Please enter an integer (0-3).")
-                elif cmd == "/rate" and len(cmd_parts) > 1:
-                    try:
-                        scale = float(cmd_parts[1])
-                        pipeline.piper_length_scale = scale
-                        print(f"⚡ Piper length scale (speed) set to: {scale}")
-                    except ValueError:
-                        print("❌ Invalid length scale. Please enter a float.")
-                else:
-                    print("❌ Unknown command or missing parameters. Type /help to see commands.")
-                continue
-            
-            # Run stream
-            token_generator = stream_ollama_generation(user_input, model=current_model)
-            pipeline.stream_text_generator(token_generator)
-            
-        except (KeyboardInterrupt, EOFError):
-            print("\n\n👋 Goodbye!")
-            break
+    # Keep the main thread alive indefinitely to service background threads
+    try:
+        while True:
+            time.sleep(1)
+    except (KeyboardInterrupt, EOFError):
+        print("\n\n👋 Stopping backend server...")
             
     pipeline.stop()
     print("✨ Voice Pipeline terminated cleanly.")
 
 if __name__ == "__main__":
-    interactive_chat_session()
+    run_headless_backend()
