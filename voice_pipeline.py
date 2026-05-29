@@ -23,6 +23,7 @@ import time
 import queue
 import threading
 import subprocess
+import json
 import sounddevice as sd
 import soundfile as sf
 import numpy as np
@@ -81,6 +82,7 @@ class SSEHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
+        global active_pipeline
         if self.path == '/chat':
             content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length)
@@ -88,7 +90,6 @@ class SSEHandler(BaseHTTPRequestHandler):
                 data = json.loads(post_data.decode('utf-8'))
                 text = data.get('text', '').strip()
                 
-                global active_pipeline
                 if active_pipeline and text:
                     active_pipeline.process_web_input(text)
                     
@@ -99,6 +100,28 @@ class SSEHandler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps({"status": "ok"}).encode('utf-8'))
             except Exception as e:
                 self.send_response(400)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
+        elif self.path == '/generate_motion':
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length)
+            try:
+                data = json.loads(post_data.decode('utf-8'))
+                prompt = data.get('prompt', '').strip()
+                
+                motion_payload = {"error": "Pipeline not running"}
+                if active_pipeline and prompt:
+                    motion_payload = active_pipeline.motion_engine.generate_motion(prompt)
+                    
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps(motion_payload).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
                 self.send_header('Content-Type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
@@ -161,6 +184,10 @@ class VoiceSynthesisPipeline:
         self.sse_server = HTTPServer(('0.0.0.0', 8080), SSEHandler)
         self.sse_thread = threading.Thread(target=self.sse_server.serve_forever, daemon=True)
         
+        # Instantiate generative Motion Diffusion Engine
+        from motion_diffusion import MotionDiffusionEngine
+        self.motion_engine = MotionDiffusionEngine()
+        
         print("=" * 60)
         print("🎙️ DIANA AI VOICE PIPELINE INITIALIZED")
         print(f"🖥️  Compute Device: {DEVICE_NAME}")
@@ -213,10 +240,31 @@ class VoiceSynthesisPipeline:
         threading.Thread(target=run, daemon=True).start()
 
     def enqueue_text(self, text: str):
-        """Adds a sentence/chunk to the pipeline queue."""
+        """Adds a sentence/chunk to the pipeline queue after extracting motion cues."""
         clean_text = text.strip()
-        if clean_text:
-            self.text_queue.put(clean_text)
+        if not clean_text:
+            return
+            
+        # Detect and extract motion cues from asterisks
+        detected_motion = None
+        asterisk_matches = re.findall(r'\*([^*]+)\*', clean_text)
+        if asterisk_matches:
+            # Use the raw text of the first asterisk cue as our motion prompt!
+            detected_motion = asterisk_matches[0].strip()
+        else:
+            # Fallback: check if the spoken sentence contains motion action verbs
+            text_lower = clean_text.lower()
+            action_triggers = ["wave", "think", "ponder", "dance", "laugh", "bow", "celebrate", "hi ", "hello", "sorry", "thank"]
+            if any(act in text_lower for act in action_triggers):
+                detected_motion = clean_text
+                    
+        # Strip all asterisk cues from the text so Piper TTS doesn't speak them
+        clean_spoken_text = re.sub(r'\*[^*]+\*', '', clean_text).strip()
+        # Clean double spaces
+        clean_spoken_text = re.sub(r'\s+', ' ', clean_spoken_text)
+        
+        if clean_spoken_text:
+            self.text_queue.put((clean_spoken_text, detected_motion))
 
     def stream_text_generator(self, token_generator):
         """
@@ -252,12 +300,13 @@ class VoiceSynthesisPipeline:
     def _synthesis_loop(self):
         """Processes text chunks through Piper (TTS) and RVC v2 (Morphing) in-memory."""
         while self.is_running:
-            text = self.text_queue.get()
-            if text is None:
+            queue_item = self.text_queue.get()
+            if queue_item is None:
                 break
                 
+            text, detected_motion = queue_item
             start_time = time.time()
-            print(f"\n[TTS Engine] ⚡ Synthesizing chunk: '{text}'")
+            print(f"\n[TTS Engine] ⚡ Synthesizing chunk: '{text}' (Motion Cue: {detected_motion})")
             
             # 1. Pipeline Stage 1: PIPER TTS (phonetic baseline generation)
             generic_wav = self._run_piper_tts(text)
@@ -272,12 +321,21 @@ class VoiceSynthesisPipeline:
             morphed_audio_data, current_samplerate = self._run_rvc_inference(generic_wav)
             morph_latency = (time.time() - morph_start) * 1000
             
+            # 3. Pipeline Stage 3: Generative Motion Diffusion synthesis
+            motion_keyframes = None
+            if detected_motion:
+                try:
+                    motion_data = self.motion_engine.generate_motion(detected_motion)
+                    motion_keyframes = motion_data.get("keyframes")
+                except Exception as me:
+                    print(f"❌ [Motion Diffusion] Synthesis failed: {me}")
+            
             total_latency = (time.time() - start_time) * 1000
             print(f"[RVC Morph] 🎭 Morph complete! Rate: {current_samplerate}Hz. Latency: {morph_latency:.1f}ms")
             print(f"[Pipeline]  ⚡ First audio packet ready in {total_latency:.1f}ms!")
             
             # Enqueue to the non-blocking playback loop with the original text for visual sync
-            self.audio_queue.put((morphed_audio_data, current_samplerate, text))
+            self.audio_queue.put((morphed_audio_data, current_samplerate, text, motion_keyframes))
             self.text_queue.task_done()
 
     def _run_piper_tts(self, text: str) -> io.BytesIO:
@@ -426,10 +484,14 @@ class VoiceSynthesisPipeline:
             if queue_item is None:
                 break
                 
-            audio_data, samplerate, text = queue_item
+            audio_data, samplerate, text, motion_keyframes = queue_item
             
-            # Broadcast starting to speak this specific sentence to transparent 3D client
-            broadcast_sse_event({"type": "sentence_start", "text": text})
+            # Broadcast starting to speak this specific sentence to transparent 3D client, including motion cue!
+            broadcast_sse_event({
+                "type": "sentence_start", 
+                "text": text,
+                "dynamic_motion": motion_keyframes
+            })
             
             try:
                 # Play the in-memory numpy array asynchronously via sounddevice

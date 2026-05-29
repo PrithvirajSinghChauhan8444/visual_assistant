@@ -41,6 +41,41 @@
     </div>
   </div>
 
+  <!-- Glassmorphism Motion Pane -->
+  <div id="motion-panel">
+    <div class="panel-header">MOTION CONTROL</div>
+    <div class="motion-buttons">
+      <button class="motion-btn active" data-motion="idle" title="Default Idle">
+        <span class="motion-icon">🧘</span>
+        <span class="motion-name">Default Idle</span>
+      </button>
+      <button class="motion-btn" data-motion="wave" title="Say Hello">
+        <span class="motion-icon">👋</span>
+        <span class="motion-name">Wave Hello</span>
+      </button>
+      <button class="motion-btn" data-motion="think" title="Ponder & Shift">
+        <span class="motion-icon">🤔</span>
+        <span class="motion-name">Think / Ponder</span>
+      </button>
+      <button class="motion-btn" data-motion="dance" title="Happy Dance">
+        <span class="motion-icon">💃</span>
+        <span class="motion-name">Happy Dance</span>
+      </button>
+      <button class="motion-btn" data-motion="bow" title="Polite Bow">
+        <span class="motion-icon">🙇</span>
+        <span class="motion-name">Polite Bow</span>
+      </button>
+      <button class="motion-btn" data-motion="celebrate" title="Celebrate Joy">
+        <span class="motion-icon">🎉</span>
+        <span class="motion-name">Celebrate</span>
+      </button>
+    </div>
+    <div class="motion-custom">
+      <input type="text" id="custom-motion-input" placeholder="Motion prompt (e.g. backflip)..." />
+      <button id="custom-motion-btn" title="Synthesize Motion via Diffusion">Go</button>
+    </div>
+  </div>
+
   <!-- Glassmorphism Theme & Gaze Control Panel -->
   <div id="theme-panel">
     <div class="panel-header">CORE CONFIG</div>
@@ -64,6 +99,36 @@
         <input type="checkbox" id="gaze-toggle" checked>
         <span class="slider"></span>
       </label>
+    </div>
+    <div class="control-row rotation-control">
+      <div class="control-label-row">
+        <span class="label">Model Rotation</span>
+        <div class="rotation-indicator-group">
+          <span id="rotation-val">0°</span>
+          <button id="reset-rotation-btn" title="Reset Rotation">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M23 4v6h-6"></path>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <input type="range" id="rotation-slider" min="-180" max="180" value="0" class="premium-slider">
+    </div>
+    <div class="control-row zoom-control">
+      <div class="control-label-row">
+        <span class="label">Camera Zoom</span>
+        <div class="zoom-indicator-group">
+          <span id="zoom-val">100%</span>
+          <button id="reset-zoom-btn" title="Reset Zoom">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M23 4v6h-6"></path>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <input type="range" id="zoom-slider" min="1.5" max="6.0" step="0.1" value="3.8" class="premium-slider">
     </div>
   </div>
 
