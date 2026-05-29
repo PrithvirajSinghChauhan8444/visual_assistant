@@ -111,10 +111,8 @@ class SSEHandler(BaseHTTPRequestHandler):
                 data = json.loads(post_data.decode('utf-8'))
                 prompt = data.get('prompt', '').strip()
                 
-                motion_payload = {"error": "Pipeline not running"}
-                if active_pipeline and prompt:
-                    motion_payload = active_pipeline.motion_engine.generate_motion(prompt)
-                    
+                motion_payload = {"error": "Motion Diffusion engine has been removed."}
+                # To be re-integrated with MoMask backend
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
@@ -179,14 +177,10 @@ class VoiceSynthesisPipeline:
         self.synthesis_thread = None
         self.playback_thread = None
         
-        # Initialize background SSE server for transparent desktop client on port 8080
+        # Background SSE server for transparent desktop client on port 8080
         # Binding to 0.0.0.0 to allow cross-device LAN connections
         self.sse_server = HTTPServer(('0.0.0.0', 8080), SSEHandler)
         self.sse_thread = threading.Thread(target=self.sse_server.serve_forever, daemon=True)
-        
-        # Instantiate generative Motion Diffusion Engine
-        from motion_diffusion import MotionDiffusionEngine
-        self.motion_engine = MotionDiffusionEngine()
         
         print("=" * 60)
         print("🎙️ DIANA AI VOICE PIPELINE INITIALIZED")
@@ -321,16 +315,8 @@ class VoiceSynthesisPipeline:
             morphed_audio_data, current_samplerate = self._run_rvc_inference(generic_wav)
             morph_latency = (time.time() - morph_start) * 1000
             
-            # 3. Pipeline Stage 3: Generative Motion Diffusion synthesis
+            # 3. Motion cues are passed directly to frontend to let UI logic handle it
             motion_keyframes = None
-            if detected_motion:
-                try:
-                    motion_data = self.motion_engine.generate_motion(detected_motion)
-                    motion_keyframes = motion_data.get("keyframes")
-                except Exception as me:
-                    print(f"❌ [Motion Diffusion] Synthesis failed: {me}")
-            
-            total_latency = (time.time() - start_time) * 1000
             print(f"[RVC Morph] 🎭 Morph complete! Rate: {current_samplerate}Hz. Latency: {morph_latency:.1f}ms")
             print(f"[Pipeline]  ⚡ First audio packet ready in {total_latency:.1f}ms!")
             

@@ -28,6 +28,11 @@ export function animate() {
 
   // 2. Animate VRM Model (Idle sway, gaze, lip sync)
   if (state.currentVrm) {
+    // Progress specialized VRM Animation Mixer for .vrma streams
+    if (state.vrmMixer) {
+        state.vrmMixer.update(delta);
+    }
+    
     // Apply model rotation offset dynamically
     state.currentVrm.scene.rotation.y = Math.PI + state.modelRotation;
 
@@ -75,6 +80,22 @@ export function animate() {
 
     let expressionHappy = 0;
     let expressionRelaxed = 0;
+
+    // Blend MoMask Neural Idle Streams
+    if (state.momaskFrames && state.momaskFrames.length > 0) {
+      const frame = state.momaskFrames[state.momaskFrameIndex];
+      
+      // Hips are allowed to translate in VRM
+      hipsPosX += frame[0][0];
+      hipsPosY += frame[0][1];
+      
+      // Convert MoMask counter-balance translations to subtle rotations for the VRM rig
+      neckY += frame[12][1] * 2.0; 
+      headX += frame[15][0] * 2.0;
+      
+      // Advance frame index safely
+      state.momaskFrameIndex = (state.momaskFrameIndex + 1) % state.momaskFrames.length;
+    }
 
     // Apply dynamic motion keyframes from motion diffusion or default to idle breathing
     switch (state.currentMotion) {

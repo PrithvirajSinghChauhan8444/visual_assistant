@@ -4,6 +4,7 @@ import { loadVRMAvatar } from './src/vrmLoader.js';
 import { animate } from './src/proceduralAnimation.js';
 import { setupSSEListener } from './src/sseClient.js';
 import { setupConfigListeners } from './src/uiControls.js';
+import { setupMoMaskListener } from './src/momaskClient.js';
 
 // Global mouse tracker for interactive 3D character gaze look-at
 window.addEventListener('mousemove', (e) => {
@@ -16,4 +17,5 @@ initScene();
 loadVRMAvatar();
 setupSSEListener();
 setupConfigListeners();
+setupMoMaskListener();
 animate();

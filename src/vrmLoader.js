@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin } from '@pixiv/three-vrm';
+import { createVRMAnimationMixer } from '@pixiv/three-vrm-animation';
 import { state } from './state.js';
 import { createDigitalOrb } from './scene.js';
 
@@ -55,6 +56,9 @@ export function loadVRMAvatar() {
       }
       
       state.currentVrm = vrm;
+      
+      // Initialize the specialized VRM Animation Mixer for future neural streams
+      state.vrmMixer = createVRMAnimationMixer(vrm);
       
       // Center VRM character perfectly on screen (facing directly forward!)
       vrm.scene.position.set(0, 0, 0);
